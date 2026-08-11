@@ -10,7 +10,6 @@ const io = new Server(server);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// 1. URLごとの画面の振り分け設定
 app.get('/', (req, res) => res.sendFile(join(__dirname, 'login.html')));
 app.get('/chat', (req, res) => res.sendFile(join(__dirname, 'chat.html')));
 
@@ -18,6 +17,9 @@ const registeredUsers = {};
 const activeSockets = {};    
 const bannedUsers = new Set();
 const bannedIPs = new Set();
+
+// 初期状態で存在する部屋リスト
+const roomList = ['ロビー'];
 
 io.on('connection', (socket) => {
   let ip = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
@@ -34,7 +36,6 @@ io.on('connection', (socket) => {
     if (registeredUsers[username]) return socket.emit('auth_error', 'そのユーザー名は既に使われています。');
 
     let role = 'user';
-    // 【セキュリティ確認】あなただけの秘密のコードに自由に変えてください！
     if (inviteCode === 'Aap@003kok25') role = 'admin';       
     if (inviteCode === '003kok25') role = 'moderator';    
 
@@ -54,11 +55,9 @@ io.on('connection', (socket) => {
     socket.room = 'ロビー';
     socket.join('ロビー');
 
-    // 認証成功時に役職データなどを渡す
     socket.emit('login_ok', { username, role: user.role });
   });
 
-  // チャット画面側から「入室準備完了」の合図を受け取った時の処理
   socket.on('chat_ready', ({ username, role }) => {
     activeSockets[socket.id] = { username, role, ip, room: 'ロビー' };
     socket.username = username;
@@ -66,7 +65,46 @@ io.on('connection', (socket) => {
     socket.room = 'ロビー';
     socket.join('ロビー');
     
+    // 現在の部屋リストを新しく入ってきたユーザーに共有
+    socket.emit('update_rooms', roomList);
+    
     io.to('ロビー').emit('chat', { name: 'システム', text: `${username}さんが入室しました`, role: 'system' });
+    updateUserList();
+  });
+
+  // 【新機能】管理者だけが部屋を作成できる命令の処理
+  socket.on('create_room', (newRoomName) => {
+    const session = activeSockets[socket.id];
+    if (!session || session.role !== 'admin') {
+      return socket.emit('chat', { name: 'システム', text: 'エラー: 部屋の作成は管理者専用です。', role: 'system' });
+    }
+
+    const trimmedRoom = newRoomName.trim();
+    if (!trimmedRoom) return;
+
+    if (roomList.includes(trimmedRoom)) {
+      return socket.emit('chat', { name: 'システム', text: 'エラー: その部屋は既に存在します。', role: 'system' });
+    }
+
+    // 部屋リストに追加して、全員の画面をリアルタイム更新
+    roomList.push(trimmedRoom);
+    io.emit('update_rooms', roomList);
+    io.emit('chat', { name: 'システム', text: `【新着】新しいチャットルーム [ ${trimmedRoom} ] が管理者の手によって作成されました！`, role: 'system' });
+  });
+
+  // 部屋の移動処理
+  socket.on('join_room', (newRoom) => {
+    const session = activeSockets[socket.id];
+    if (!session || !newRoom) return;
+
+    io.to(socket.room).emit('chat', { name: 'システム', text: `${session.username}さんが退室しました`, role: 'system' });
+    socket.leave(socket.room);
+
+    socket.room = newRoom;
+    socket.join(newRoom);
+    activeSockets[socket.id].room = newRoom;
+
+    io.to(newRoom).emit('chat', { name: 'システム', text: `${session.username}さんが入室しました`, role: 'system' });
     updateUserList();
   });
 
