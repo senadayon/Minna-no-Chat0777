@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>チャットルーム</title>
+  <title>メインチャットルーム</title>
   <style>
     .admin { color: #ffca28 !important; font-weight: bold; }      
     .moderator { color: #d1c4e9 !important; font-weight: bold; }  
@@ -28,8 +28,11 @@
     #sendBtn { width: 100px; margin: 0; background: #007acc; border: none; font-weight: bold; cursor: pointer; }
     #sendBtn:hover { background: #0062a3; }
 
-    .room-btn { text-align: left; background: #252526; margin-bottom: 8px; width: 100%; color: #fff; border: 1px solid #444; border-radius: 6px; cursor: pointer; padding: 10px; }
-    .room-btn.active { background: #007acc; }
+    #roomListArea { display: flex; flex-direction: column; gap: 5px; margin-bottom: 15px; }
+    .room-btn { text-align: left; background: #252526; width: 100%; color: #fff; border: 1px solid #444; border-radius: 6px; cursor: pointer; padding: 10px; }
+    .room-btn.active { background: #007acc; border-color: #007acc; }
+    .admin-create-btn { background: #2e7d32 !important; border: none; font-weight: bold; cursor: pointer; padding: 8px; margin-top: 5px; font-size: 0.9em; width: 100%; color: white; border-radius: 6px; }
+
     #userList { overflow-y: auto; flex: 1; }
     .user-item { background: #252526; padding: 10px; border-radius: 6px; margin-bottom: 8px; font-size: 0.9em; }
     .admin-controls { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
@@ -42,15 +45,17 @@
 
   <div id="chatWrapper">
     <div class="left-panel">
-      <h3>部屋の名前</h3>
-      <button class="room-btn active">🏢 ロビー</button>
+      <h3>部屋リスト</h3>
+      <div id="roomListArea"></div>
+      <!-- 👑 管理者にだけJavaScriptでここに作成ボタンを出現させます -->
+      <div id="adminRoomPanel"></div>
       
       <h3>オンライン</h3>
       <div id="userList"></div>
     </div>
 
     <div class="main-panel">
-      <h2 id="roomTitle">チャット</h2>
+      <h2 id="roomTitle">部屋: ロビー</h2>
       <div id="messages"></div>
 
       <div class="input-area">
@@ -62,18 +67,55 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    // 【修正点】こちらもRenderのURLへ直接接続するように書き換えました
     const socket = io('https://onrender.com');
     
     const myName = sessionStorage.getItem('chat_username');
     const myRole = sessionStorage.getItem('chat_role');
+    let currentRoom = 'ロビー';
 
     if (!myName) {
       alert("ログインしてください。");
       window.location.href = '/';
     } else {
       socket.emit('chat_ready', { username: myName, role: myRole });
+      
+      // 管理者の場合のみ「部屋作成ボタン」を画面に配置する
+      if (myRole === 'admin') {
+        document.getElementById('adminRoomPanel').innerHTML = `
+          <button class="admin-create-btn" onclick="promptCreateRoom()">＋ 新しい部屋を作成</button>
+        `;
+      }
     }
+
+    // 部屋作成のポップアップ
+    function promptCreateRoom() {
+      const roomName = prompt("新しく作る部屋の名前を入力してください:");
+      if (roomName && roomName.trim()) {
+        socket.emit('create_room', roomName.trim());
+      }
+    }
+
+    // 部屋の切り替え命令
+    function selectRoom(roomName) {
+      if (currentRoom === roomName) return;
+      currentRoom = roomName;
+      document.getElementById('roomTitle').innerText = `部屋: ${roomName}`;
+      document.getElementById('messages').innerHTML = ''; // 画面を一度きれいに
+      socket.emit('join_room', roomName);
+    }
+
+    // サーバーから送られてきた部屋リストをリアルタイムに再描画
+    socket.on('update_rooms', (rooms) => {
+      const area = document.getElementById('roomListArea');
+      area.innerHTML = '';
+      rooms.forEach(r => {
+        const btn = document.createElement('button');
+        btn.className = `room-btn ${currentRoom === r ? 'active' : ''}`;
+        btn.innerText = `🏢 ${r}`;
+        btn.onclick = () => selectRoom(r);
+        area.appendChild(btn);
+      });
+    });
 
     function sendMsg() {
       const text = document.getElementById('msgInput').value.trim();
