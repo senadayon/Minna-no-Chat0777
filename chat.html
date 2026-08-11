@@ -2,12 +2,11 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>チャットルーム</title>
+  <title>メインチャットルーム</title>
   <style>
-    /* 【最重要】ここが抜けていたため、文字に権限の色がついていませんでした */
-    .admin { color: #ffca28 !important; font-weight: bold; }      /* 管理者は黄金色 */
-    .moderator { color: #d1c4e9 !important; font-weight: bold; }  /* モデレーターは薄紫 */
-    .user { color: #40c4ff !important; }                          /* 一般は水色 */
+    .admin { color: #ffca28 !important; font-weight: bold; }      
+    .moderator { color: #d1c4e9 !important; font-weight: bold; }  
+    .user { color: #40c4ff !important; }                          
     .system { color: #aaaaaa; font-style: italic; text-align: center; display: block; margin: 10px 0; }
 
     body { font-family: 'Segoe UI', Meiryo, sans-serif; background: #121212; color: #e0e0e0; margin: 0; padding: 20px; display: flex; height: 100vh; box-sizing: border-box; }
@@ -43,15 +42,26 @@
 
   <div id="chatWrapper">
     <div class="left-panel">
-      <h3>部屋</h3>
-      <button class="room-btn active">チャット</button>
+      <h3>部屋の名前</h3>
+      <button class="room-btn active">🏢 ロビー</button>
       
-      <h3>オンラインユーザー</h3>
+      <h3>オンライン</h3>
       <div id="userList"></div>
     </div>
 
     <div class="main-panel">
-      <h2 id="roomTitle">部屋: チャット</h2>
+      <h2 id="roomTitle">チャット</h2>
+      <div id="messages"></div>
+
+      <div class="input-area">
+        <input id="msgInput" placeholder="メッセージを入力..." onkeypress="if(event.keyCode==13) sendMsg()">
+        <button id="sendBtn" onclick="sendMsg()">送信</button>
+      </div>
+    </div>
+  </div>
+
+    <div class="main-panel">
+      <h2 id="roomTitle">チャット</h2>
       <div id="messages"></div>
 
       <div class="input-area">
@@ -63,7 +73,8 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    const socket = io();
+    // 【修正点】こちらもRenderのURLへ直接接続するように書き換えました
+    const socket = io('https://onrender.com');
     
     const myName = sessionStorage.getItem('chat_username');
     const myRole = sessionStorage.getItem('chat_role');
@@ -119,18 +130,15 @@
         const div = document.createElement('div');
         div.className = 'user-item';
 
-        // 👑 王冠・マークの付与
         let roleBadge = '';
         if (u.role === 'admin') roleBadge = ' 👑';
         if (u.role === 'moderator') roleBadge = ' 🛡️';
 
-        // 🔍 管理者画面でのみIPを表示
         let ipDisplay = '';
         if (myRole === 'admin') {
           ipDisplay = `<br><span style="color: #8a8a8a; font-size: 0.85em; font-family: monospace;">IP: ${u.ip}</span>`;
         }
 
-        // 画面に色の付いたクラス名(${u.role})を適用して出力
         div.innerHTML = `<span class="${u.role}">● ${u.username}${roleBadge}</span> <span style="font-size:0.8em;color:#666;">(${u.room})</span>${ipDisplay}`;
         
         if(myRole === 'admin' || myRole === 'moderator') {
