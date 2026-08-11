@@ -60,17 +60,6 @@
     </div>
   </div>
 
-    <div class="main-panel">
-      <h2 id="roomTitle">画像共有</h2>
-      <div id="messages"></div>
-
-      <div class="input-area">
-        <input id="msgInput" placeholder="メッセージを入力..." onkeypress="if(event.keyCode==13) sendMsg()">
-        <button id="sendBtn" onclick="sendMsg()">送信</button>
-      </div>
-    </div>
-  </div>
-
   <script src="/socket.io/socket.io.js"></script>
   <script>
     // 【修正点】こちらもRenderのURLへ直接接続するように書き換えました
