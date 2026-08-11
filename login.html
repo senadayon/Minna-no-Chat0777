@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ログイン</title>
+  <style>
+    body { font-family: 'Segoe UI', Meiryo, sans-serif; background: #121212; color: #e0e0e0; margin: 0; padding: 20px; display: flex; height: 100vh; box-sizing: border-box; }
+    #authContainer { max-width: 400px; margin: auto; background: #1e1e1e; padding: 30px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); width: 100%; }
+    input, button { width: 100%; padding: 12px; background: #2a2a2a; color: #fff; border: 1px solid #444; border-radius: 6px; box-sizing: border-box; font-size: 1em; margin-bottom: 15px; }
+    button { background: #007acc; border: none; font-weight: bold; cursor: pointer; }
+    button:hover { background: #0062a3; }
+    .toggle-link { text-align: center; color: #40c4ff; cursor: pointer; font-size: 0.9em; }
+  </style>
+</head>
+<body>
+
+  <div id="authContainer">
+    <h2 id="authTitle">ログイン</h2>
+    <input id="authUsername" placeholder="ユーザー名">
+    <input id="authPassword" type="password" placeholder="パスワード">
+    <!-- 乗っ取り対策：ヒント文字を完全に消し去った安全な入力欄 -->
+    <input id="authInvite" placeholder="認証用パスコード（お持ちの方のみ）" style="display:none;">
+    <button onclick="handleAuth()">実行</button>
+    <div class="toggle-link" onclick="toggleAuthMode()">アカウント新規作成はこちら</div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let isLoginMode = true;
+
+    function toggleAuthMode() {
+      isLoginMode = !isLoginMode;
+      document.getElementById('authTitle').innerText = isLoginMode ? "ログイン" : "アカウント作成";
+      document.getElementById('authInvite').style.display = isLoginMode ? "none" : "block";
+    }
+
+    function handleAuth() {
+      const username = document.getElementById('authUsername').value.trim();
+      const password = document.getElementById('authPassword').value.trim();
+      const inviteCode = document.getElementById('authInvite').value.trim();
+      if(!username || !password) return alert("入力してください");
+      socket.emit(isLoginMode ? 'login' : 'register', { username, password, inviteCode });
+    }
+
+    socket.on('auth_error', alert);
+    socket.on('auth_success', (d) => { alert(d.message); toggleAuthMode(); });
+    
+    // ログイン成功時、ブラウザのデータ保存機能(SessionStorage)に名前と役職を記憶させてチャット画面へジャンプ！
+    socket.on('login_ok', (d) => {
+      sessionStorage.setItem('chat_username', d.username);
+      sessionStorage.setItem('chat_role', d.role);
+      window.location.href = '/chat'; // チャット画面に自動切り替え
+    });
+  </script>
+</body>
+</html>

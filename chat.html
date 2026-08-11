@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>チャットルーム</title>
+  <style>
+    /* 【最重要】ここが抜けていたため、文字に権限の色がついていませんでした */
+    .admin { color: #ffca28 !important; font-weight: bold; }      /* 管理者は黄金色 */
+    .moderator { color: #d1c4e9 !important; font-weight: bold; }  /* モデレーターは薄紫 */
+    .user { color: #40c4ff !important; }                          /* 一般は水色 */
+    .system { color: #aaaaaa; font-style: italic; text-align: center; display: block; margin: 10px 0; }
+
+    body { font-family: 'Segoe UI', Meiryo, sans-serif; background: #121212; color: #e0e0e0; margin: 0; padding: 20px; display: flex; height: 100vh; box-sizing: border-box; }
+    #chatWrapper { flex: 1; display: flex; gap: 20px; min-height: 0; width: 100%; }
+    .left-panel { flex: 1; background: #1e1e1e; padding: 15px; border-radius: 12px; display: flex; flex-direction: column; max-width: 260px; }
+    .main-panel { flex: 3; background: #1e1e1e; padding: 20px; border-radius: 12px; display: flex; flex-direction: column; }
+
+    #messages { flex: 1; overflow-y: auto; background: #151515; border-radius: 8px; padding: 15px; margin-bottom: 15px; }
+    .msg-box { display: flex; flex-direction: column; margin-bottom: 12px; max-width: 80%; }
+    .msg-box.me { margin-left: auto; align-items: flex-end; }
+    .msg-header { font-size: 0.8em; margin-bottom: 3px; display: flex; gap: 8px; }
+    .msg-body { background: #2a2a2a; padding: 10px 14px; border-radius: 8px; color: #fff; position: relative; word-break: break-all; }
+    .me .msg-body { background: #007acc; }
+    .msg-time { font-size: 0.7em; color: #777; margin-top: 2px; }
+
+    .input-area { display: flex; gap: 10px; }
+    input, button { padding: 12px; background: #2a2a2a; color: #fff; border: 1px solid #444; border-radius: 6px; box-sizing: border-box; font-size: 1em; }
+    #msgInput { flex: 1; margin: 0; }
+    #sendBtn { width: 100px; margin: 0; background: #007acc; border: none; font-weight: bold; cursor: pointer; }
+    #sendBtn:hover { background: #0062a3; }
+
+    .room-btn { text-align: left; background: #252526; margin-bottom: 8px; width: 100%; color: #fff; border: 1px solid #444; border-radius: 6px; cursor: pointer; padding: 10px; }
+    .room-btn.active { background: #007acc; }
+    #userList { overflow-y: auto; flex: 1; }
+    .user-item { background: #252526; padding: 10px; border-radius: 6px; margin-bottom: 8px; font-size: 0.9em; }
+    .admin-controls { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+    .admin-controls button { padding: 4px 8px; font-size: 0.8em; margin: 0; width: auto; background: #e65100; border: none; border-radius: 4px; cursor: pointer; color: white; }
+    .admin-controls button.ban-btn { background: #b71c1c; }
+    .admin-controls button.ipban-btn { background: #4a148c; }
+  </style>
+</head>
+<body>
+
+  <div id="chatWrapper">
+    <div class="left-panel">
+      <h3>部屋</h3>
+      <button class="room-btn active">チャット</button>
+      
+      <h3>オンラインユーザー</h3>
+      <div id="userList"></div>
+    </div>
+
+    <div class="main-panel">
+      <h2 id="roomTitle">部屋: チャット</h2>
+      <div id="messages"></div>
+
+      <div class="input-area">
+        <input id="msgInput" placeholder="メッセージを入力..." onkeypress="if(event.keyCode==13) sendMsg()">
+        <button id="sendBtn" onclick="sendMsg()">送信</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    
+    const myName = sessionStorage.getItem('chat_username');
+    const myRole = sessionStorage.getItem('chat_role');
+
+    if (!myName) {
+      alert("ログインしてください。");
+      window.location.href = '/';
+    } else {
+      socket.emit('chat_ready', { username: myName, role: myRole });
+    }
+
+    function sendMsg() {
+      const text = document.getElementById('msgInput').value.trim();
+      if(!text) return;
+      socket.emit('message', text);
+      document.getElementById('msgInput').value = '';
+    }
+
+    function renderMsg(data) {
+      const box = document.getElementById('messages');
+      if(data.role === 'system') {
+        const div = document.createElement('div');
+        div.className = 'system';
+        div.innerText = data.text;
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+        return;
+      }
+
+      const isMe = data.name === myName;
+      const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+      
+      const html = `
+        <div class="msg-box ${isMe ? 'me' : ''}">
+          <div class="msg-header"><span class="${data.role}">[${data.name}]</span></div>
+          <div class="msg-body">${data.text}</div>
+          <div class="msg-time">${time}</div>
+        </div>
+      `;
+      
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = html;
+      box.appendChild(wrapper.firstElementChild);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    socket.on('chat', (data) => renderMsg(data));
+
+    socket.on('user_list', (list) => {
+      const container = document.getElementById('userList');
+      container.innerHTML = '';
+      list.forEach(u => {
+        const div = document.createElement('div');
+        div.className = 'user-item';
+
+        // 👑 王冠・マークの付与
+        let roleBadge = '';
+        if (u.role === 'admin') roleBadge = ' 👑';
+        if (u.role === 'moderator') roleBadge = ' 🛡️';
+
+        // 🔍 管理者画面でのみIPを表示
+        let ipDisplay = '';
+        if (myRole === 'admin') {
+          ipDisplay = `<br><span style="color: #8a8a8a; font-size: 0.85em; font-family: monospace;">IP: ${u.ip}</span>`;
+        }
+
+        // 画面に色の付いたクラス名(${u.role})を適用して出力
+        div.innerHTML = `<span class="${u.role}">● ${u.username}${roleBadge}</span> <span style="font-size:0.8em;color:#666;">(${u.room})</span>${ipDisplay}`;
+        
+        if(myRole === 'admin' || myRole === 'moderator') {
+          let btns = `<div class="admin-controls"><button onclick="adminAction('kick','${u.username}')">キック</button>`;
+          if(myRole === 'admin') {
+            btns += `<button class="ban-btn" onclick="adminAction('ban','${u.username}')">BAN</button>`;
+            btns += `<button class="ipban-btn" onclick="adminAction('ipban','${u.username}')">IPBAN</button>`;
+          }
+          btns += `</div>`;
+          div.innerHTML += btns;
+        }
+        container.appendChild(div);
+      });
+    });
+
+    function adminAction(action, targetName) { socket.emit('admin_action', { action, targetName }); }
+    socket.on('kick_notice', (msg) => { alert(msg); window.location.href = '/'; });
+  </script>
+</body>
+</html>
